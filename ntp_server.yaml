@@ -1,0 +1,83 @@
+packages:
+  base: !include config_example.yaml
+
+external_components:
+  - source:
+      type: local
+      path: components
+
+uart:
+  id: gps_uart
+  rx_pin: GPIO43
+  tx_pin: GPIO44
+  baud_rate: 9600
+
+gps:
+  id: gps_module
+  uart_id: gps_uart
+
+time:
+  - platform: gps_pps_time
+    id: gps_pps
+    gps_id: gps_module
+    pps_pin: GPIO1
+    update_interval: 20s
+    satellites:
+      id: total_satellites
+      name: "Satellites"
+      icon: "mdi:satellite-variant"
+      accuracy_decimals: 0
+      state_class: measurement
+      force_update: false
+      disabled_by_default: false
+      internal: false
+    clock_offset:
+      id: ntp_clock_offset
+      name: "Clock Offset"
+      icon: "mdi:clock-check-outline"
+      unit_of_measurement: "µs"
+      accuracy_decimals: 0
+      state_class: measurement
+    pps_drift:
+      id: pps_raw_drift
+      name: "PPS Drift"
+      icon: "mdi:clock-alert-outline"
+      unit_of_measurement: "µs"
+      accuracy_decimals: 0
+      state_class: measurement
+    gps_time:
+      id: gps_current_time
+      name: "GPS Time"
+      icon: "mdi:clock-outline"
+      entity_category: "diagnostic"
+    gps_satellites:
+      id: gps_sat_count
+      name: "GPS Satellites"
+      icon: "mdi:satellite-variant"
+      accuracy_decimals: 0
+      state_class: measurement
+    glonass_satellites:
+      id: glonass_sat_count
+      name: "GLONASS Satellites"
+      icon: "mdi:satellite-variant"
+      accuracy_decimals: 0
+      state_class: measurement
+    galileo_satellites:
+      id: galileo_sat_count
+      name: "Galileo Satellites"
+      icon: "mdi:satellite-variant"
+      accuracy_decimals: 0
+      state_class: measurement
+
+debug:
+  update_interval: 60s
+
+text_sensor:
+  - platform: debug
+    reset_reason:
+      name: "Reset Reason"
+
+uart_fix:
+
+ntp_server:
+  time_id: gps_pps
