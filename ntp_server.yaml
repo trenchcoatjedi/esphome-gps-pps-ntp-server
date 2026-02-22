@@ -10,7 +10,7 @@ uart:
   id: gps_uart
   rx_pin: GPIO43
   tx_pin: GPIO44
-  baud_rate: 9600
+  baud_rate: 115200
 
 gps:
   id: gps_module
@@ -21,7 +21,7 @@ time:
     id: gps_pps
     gps_id: gps_module
     pps_pin: GPIO1
-    update_interval: 20s
+    update_interval: 60s
     satellites:
       id: total_satellites
       name: "Satellites"
@@ -68,16 +68,6 @@ time:
       icon: "mdi:satellite-variant"
       accuracy_decimals: 0
       state_class: measurement
-
-debug:
-  update_interval: 60s
-
-text_sensor:
-  - platform: debug
-    reset_reason:
-      name: "Reset Reason"
-
-uart_fix:
 
 ntp_server:
   time_id: gps_pps
