@@ -20,6 +20,7 @@ class GPSPPSTime : public time::RealTimeClock, public gps::GPSListener {
   void set_gps_satellites_sensor(sensor::Sensor *sensor) { this->gps_satellites_sensor_ = sensor; }
   void set_glonass_satellites_sensor(sensor::Sensor *sensor) { this->glonass_satellites_sensor_ = sensor; }
   void set_galileo_satellites_sensor(sensor::Sensor *sensor) { this->galileo_satellites_sensor_ = sensor; }
+  void set_beidou_satellites_sensor(sensor::Sensor *sensor) { this->beidou_satellites_sensor_ = sensor; }
 
   void setup() override;
   void loop() override;
@@ -44,16 +45,19 @@ class GPSPPSTime : public time::RealTimeClock, public gps::GPSListener {
   sensor::Sensor *gps_satellites_sensor_{nullptr};
   sensor::Sensor *glonass_satellites_sensor_{nullptr};
   sensor::Sensor *galileo_satellites_sensor_{nullptr};
+  sensor::Sensor *beidou_satellites_sensor_{nullptr};
 
   /// TinyGPSCustom objects for per-constellation satellite counts (GSV sentences)
   TinyGPSCustom *gp_gsv_sats_{nullptr};
   TinyGPSCustom *gl_gsv_sats_{nullptr};
   TinyGPSCustom *ga_gsv_sats_{nullptr};
+  TinyGPSCustom *bd_gsv_sats_{nullptr};
 
   /// Last per-constellation satellite counts
   uint16_t last_gps_sat_count_{0};
   uint16_t last_glonass_sat_count_{0};
   uint16_t last_galileo_sat_count_{0};
+  uint16_t last_beidou_sat_count_{0};
 
   /// Last GPS epoch extracted from NMEA sentences
   volatile time_t last_gps_epoch_{0};
