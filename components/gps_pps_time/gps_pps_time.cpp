@@ -156,6 +156,8 @@ void GPSPPSTime::on_update(TinyGPSPlus &tiny_gps) {
     this->gp_gsv_sats_ = new TinyGPSCustom(tiny_gps, "GPGSV", 3);
     this->gl_gsv_sats_ = new TinyGPSCustom(tiny_gps, "GLGSV", 3);
     this->ga_gsv_sats_ = new TinyGPSCustom(tiny_gps, "GAGSV", 3);
+    this->bd_gsv_sats_ = new TinyGPSCustom(tiny_gps, "BDGSV", 3);
+    
   }
 
   if (tiny_gps.satellites.isValid()) {
@@ -169,6 +171,8 @@ void GPSPPSTime::on_update(TinyGPSPlus &tiny_gps) {
     this->last_glonass_sat_count_ = atoi(this->gl_gsv_sats_->value());
   if (this->ga_gsv_sats_->isUpdated())
     this->last_galileo_sat_count_ = atoi(this->ga_gsv_sats_->value());
+  if (this->bd_gsv_sats_->isUpdated())
+    this->last_beidou_sat_count_ = atoi(this->bd_gsv_sats_->value());
 
   if (!tiny_gps.time.isValid() || !tiny_gps.date.isValid() ||
       !tiny_gps.time.isUpdated() || !tiny_gps.date.isUpdated() ||
@@ -210,7 +214,7 @@ void GPSPPSTime::update() {
   if (this->satellites_sensor_ != nullptr) {
     // Sum per-constellation GSV counts for consistent "in view" total
     uint16_t total = this->last_gps_sat_count_ + this->last_glonass_sat_count_
-                     + this->last_galileo_sat_count_;
+                     + this->last_galileo_sat_count_ + this->last_beidou_sat_count_;
     this->satellites_sensor_->publish_state(total);
   }
 
@@ -223,7 +227,10 @@ void GPSPPSTime::update() {
   if (this->galileo_satellites_sensor_ != nullptr && this->ga_gsv_sats_ != nullptr && this->ga_gsv_sats_->isValid()) {
     this->galileo_satellites_sensor_->publish_state(this->last_galileo_sat_count_);
   }
-
+  if (this->beidou_satellites_sensor_ != nullptr && this->bd_gsv_sats_ != nullptr && this->bd_gsv_sats_->isValid()) {
+    this->beidou_satellites_sensor_->publish_state(this->last_beidou_sat_count_);
+  }
+  
   if (this->clock_offset_sensor_ != nullptr && this->pps_synced_) {
     // Filtered clock offset: actual error NTP clients see. Only updated on clean measurements;
     // on spikes, estimates drift from crystal rate (since adjtime skipped the correction).
