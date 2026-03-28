@@ -6,7 +6,8 @@
 
 Stratum-1 NTP server running on ESPHome, good enough for home lab. A u-blox NEO-8M GPS module provides coarse UTC time via NMEA sentences, while its PPS output disciplines the system clock to microsecond accuracy.
 
-**Hardware**: DOIT ESP32 DEVKIT V1 + u-blox NEO-8M GPS module: https://www.aliexpress.us/item/3256808277480565.html
+**Hardware**: DOIT ESP32 DEVKIT V1 + u-blox NEO-8M GPS module such as this one: https://www.aliexpress.us/item/3256808277480565.html
+
 **Accuracy**: ~10 µs worst-case between PPS corrections, self-correcting every second
 
 ## Components
@@ -131,7 +132,7 @@ Compensates for signal propagation delay in the antenna cable (~5 ns per meter o
 ```yaml
 UBX-CFG-TP5
 ```
-Active GNSS constellations. Enable GPS, SBAS and Galileo.
+Active GNSS constellations. Enable GPS, SBAS, Beidou and Galileo.
 
 ```yaml
 UBX-CFG-GNSS
