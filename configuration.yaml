@@ -10,6 +10,8 @@ esp32:
 external_components:
   - source: github://trenchcoatjedi/esphome-gps-pps-ntp-server@main
 
+logger:
+
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
@@ -17,7 +19,7 @@ wifi:
   ap:
     ssid: "ESP32 GPS Fallback Hotspot"
     password: "PASSWORD"
-
+    
 uart:
   id: gps_uart
   rx_pin: GPIO16
