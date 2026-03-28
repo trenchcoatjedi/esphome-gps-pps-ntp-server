@@ -1,20 +1,45 @@
-packages:
-  base: !include config_example.yaml
+esphome:
+  name: testesp32
+  friendly_name: TestESP32
+
+esp32:
+  board: esp32doit-devkit-v1
+  framework:
+    type: esp-idf
 
 external_components:
-  - source:
-      type: local
-      path: components
+  - source: github://trenchcoatjedi/esphome-gps-pps-ntp-server@main
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "ESP32 GPS Fallback Hotspot"
+    password: "PASSWORD"
 
 uart:
   id: gps_uart
-  rx_pin: GPIO43
-  tx_pin: GPIO44
-  baud_rate: 115200
+  rx_pin: GPIO16
+  tx_pin: GPIO17
+  baud_rate: 9600
 
 gps:
   id: gps_module
   uart_id: gps_uart
+  latitude:
+    name: "GPS Latitude"
+  longitude:
+    name: "GPS Longitude"
+  altitude:
+    name: "GPS Altitude"
+  speed:
+    name: "GPS Speed"
+  course:
+    name: "GPS Course"
+  hdop:
+    name: "GPS HDOP"
+  update_interval: 20s
 
 time:
   - platform: gps_pps_time
@@ -71,3 +96,6 @@ time:
 
 ntp_server:
   time_id: gps_pps
+
+web_server:
+  port: 80
