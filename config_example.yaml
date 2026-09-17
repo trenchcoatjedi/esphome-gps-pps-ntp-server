@@ -6,6 +6,7 @@ esp32:
   board: wt32-eth01
   framework:
     type: esp-idf
+    version: 5.5.5
     advanced:
       minimum_chip_revision: "3.1"
       sram1_as_iram: true
@@ -16,11 +17,12 @@ logger:
 # Enable Home Assistant API
 api:
   encryption:
-    key: "super-secret-key"
+    key: "super-secret-ekey"
   reboot_timeout: 0s
     
 ota:
   - platform: esphome
+    encryption:
 
 ethernet:
   type: LAN8720
@@ -167,7 +169,7 @@ sensor:
     entity_category: "diagnostic"
     unit_of_measurement: s
   
-switch:
+button:
   - platform: restart
     name: "Restart Device"
     entity_category: "diagnostic"
