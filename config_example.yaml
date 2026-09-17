@@ -1,54 +1,172 @@
 esphome:
-  friendly_name: "ESP32-S3-ETH NTP"
-  name: ntp-server
-
-psram:
-  mode: octal
-  speed: 80MHz
+  name: gps-ntp-server
+  friendly_name: GPS NTP Server
 
 esp32:
-  variant: esp32s3
-  flash_size: 16MB
+  board: wt32-eth01
   framework:
     type: esp-idf
-
+    advanced:
+      minimum_chip_revision: "3.1"
+      sram1_as_iram: true
+      
 logger:
-  baud_rate: 0
-  level: DEBUG
+  level: INFO
 
+# Enable Home Assistant API
 api:
+  encryption:
+    key: "super-secret-key"
   reboot_timeout: 0s
+    
+ota:
+  - platform: esphome
+
+ethernet:
+  type: LAN8720
+  mdc_pin: GPIO23
+  mdio_pin: GPIO18
+  clk:
+    mode: CLK_EXT_IN
+    pin: GPIO0
+  phy_addr: 1
+  power_pin: GPIO16
 
 preferences:
   flash_write_interval: never
 
-ota:
-  - platform: esphome
+external_components:
+  - source: github://trenchcoatjedi/esphome-gps-pps-ntp-server@no-eth\
+    refresh: 24h
 
-web_server:
-  port: 80
-  version: 3
-  local: true
+uart:
+  id: gps_uart
+  rx_pin: GPIO3
+  tx_pin: GPIO1
+  baud_rate: 115200
 
-ethernet:
-  type: W5500
-  clk_pin: GPIO13
-  mosi_pin: GPIO11
-  miso_pin: GPIO12
-  cs_pin: GPIO14
-  interrupt_pin: GPIO10
-  reset_pin: GPIO9
+gps:
+  id: gps_module
+  uart_id: gps_uart
+  latitude:
+    name: "GPS Latitude"
+    id: latitude
+    state_class: measurement
+    icon: "mdi:crosshairs-gps"    
+    filters:
+      filter_out: nan
+  longitude:
+    name: "GPS Longitude"
+    id: longitude
+    state_class: measurement
+    icon: "mdi:crosshairs-gps"
+    filters:
+      filter_out: nan  
+  altitude:
+    name: "GPS Altitude"
+    id: altitude
+    unit_of_measurement: m
+    icon: "mdi:elevation-rise"
+    state_class: measurement    
+    filters:
+      filter_out: nan
+  speed:
+    name: "GPS Speed"
+    id: speed
+    internal: true
+    filters:
+      filter_out: nan
+  course:
+    name: "GPS Course"
+    id: course
+    internal: true
+    filters:
+      filter_out: nan
+  hdop:
+    name: "GPS HDOP"
+    internal: true
+    filters:
+      filter_out: nan
+  update_interval: 1h
+
+ntp_server:
+  time_id: gps_pps
+
+time:
+  - platform: gps_pps_time
+    id: gps_pps
+    gps_id: gps_module
+    pps_pin: GPIO4
+    update_interval: 60s
+    satellites:
+      id: total_satellites
+      name: "Satellites"
+      icon: "mdi:satellite-variant"
+      accuracy_decimals: 0
+      state_class: measurement
+      force_update: false
+      disabled_by_default: false
+      internal: false
+      filters:
+       filter_out: nan     
+    clock_offset:
+      id: ntp_clock_offset
+      name: "Clock Offset"
+      icon: "mdi:clock-check-outline"
+      unit_of_measurement: "µs"
+      accuracy_decimals: 0
+      state_class: measurement
+      filters:
+       filter_out: nan    
+    pps_drift:
+      id: pps_raw_drift
+      name: "PPS Drift"
+      icon: "mdi:clock-alert-outline"
+      unit_of_measurement: "µs"
+      accuracy_decimals: 0
+      state_class: measurement
+      filters:
+       filter_out: nan    
+    gps_time:
+      id: gps_current_time
+      name: "GPS Date and Time"
+      icon: "mdi:clock-outline"
+      entity_category: "diagnostic"
+      internal: true
+    gps_satellites:
+      id: gps_sat_count
+      name: "GPS Satellites"
+      icon: "mdi:satellite-variant"
+      accuracy_decimals: 0
+      filters:
+       filter_out: nan    
+      state_class: measurement
+    glonass_satellites:
+      id: glonass_sat_count
+      name: "GLONASS Satellites"
+      icon: "mdi:satellite-variant"
+      accuracy_decimals: 0
+      filters:
+       filter_out: nan    
+      state_class: measurement
+    galileo_satellites:
+      id: galileo_sat_count
+      name: "Galileo Satellites"
+      icon: "mdi:satellite-variant"
+      accuracy_decimals: 0
+      filters:
+       filter_out: nan    
+      state_class: measurement
 
 sensor:
   - platform: uptime
-    name: "Uptime"
-    update_interval: 60s
-    icon: mdi:clock-outline
+    id: up_time
+    type: seconds
+    name: Uptime Sensor
+    update_interval: 300s
     entity_category: "diagnostic"
-  - platform: internal_temperature
-    name: "Internal Temperature"
-    entity_category: "diagnostic"
-
+    unit_of_measurement: s
+  
 switch:
   - platform: restart
     name: "Restart Device"
