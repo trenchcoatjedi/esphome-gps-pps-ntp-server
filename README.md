@@ -2,7 +2,7 @@
 # ESPHome GPS/PPS NTP Server
 ## Overview
 
-Stratum-1 NTP server running on ESPHome, good enough for home lab. A u-blox NEO-M8N GPS module provides coarse UTC time via NMEA sentences, while its PPS output disciplines the system clock to microsecond accuracy. This repo is optimized for the WT32-ETH01 board and needs to drop the customizations for the board the original repo uses. Forked from @tiehfood
+Stratum-1 NTP server running on ESPHome, good enough for home lab. A u-blox NEO-M8N GPS module provides coarse UTC time via NMEA sentences, while its PPS output disciplines the system clock to microsecond accuracy. This repo is optimized for the WT32-ETH01 board with the NEO-M8N; config_example.yaml is a paste-and-go solution including a full wiring schema. This repo also drops customizations for the different ESP32 board the original repo uses. Forked from @tiehfood
 
 **Hardware**: WT32-ETH01 + NEO-M8N GPS module, powered by POE splitter providing ethernet and DC power
 **Accuracy**: ~10 µs worst-case between PPS corrections, self-correcting every second
