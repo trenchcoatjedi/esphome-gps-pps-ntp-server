@@ -158,6 +158,12 @@ time:
       filters:
        filter_out: nan    
       state_class: measurement
+    beidou_satellites:
+      id: beidou_sat_count
+      name: "Beidou Satellites"
+      icon: "mdi:satellite-variant"
+      accuracy_decimals: 0
+      state_class: measurement
 
 sensor:
   - platform: uptime
