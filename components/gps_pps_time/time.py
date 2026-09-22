@@ -10,12 +10,17 @@ from esphome.const import (
 
 CONF_GPS_ID = "gps_id"
 CONF_PPS_PIN = "pps_pin"
+CONF_PPS_INTERVAL_PPB = "pps_interval_ppb"
 CONF_CLOCK_OFFSET = "clock_offset"
 CONF_PPS_DRIFT = "pps_drift"
 CONF_GPS_TIME = "gps_time"
 CONF_GPS_SATELLITES = "gps_satellites"
 CONF_GLONASS_SATELLITES = "glonass_satellites"
 CONF_GALILEO_SATELLITES = "galileo_satellites"
+CONF_BEIDOU_SATELLITES = "beidou_satellites"
+CONF_CRASH_INFO = "crash_info"
+CONF_NMEA_CLOCK_DELTA = "nmea_clock_delta"
+CONF_ANCHOR_PRED_ERROR = "anchor_pred_error"
 
 DEPENDENCIES = ["gps"]
 AUTO_LOAD = ["sensor", "text_sensor"]
@@ -47,6 +52,12 @@ CONFIG_SCHEMA = time_.TIME_SCHEMA.extend(
             accuracy_decimals=0,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
+        cv.Optional(CONF_PPS_INTERVAL_PPB): sensor.sensor_schema(
+            unit_of_measurement="ppb",
+            icon="mdi:sine-wave",
+            accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
         cv.Optional(CONF_GPS_TIME): text_sensor.text_sensor_schema(
             icon="mdi:clock-outline",
         ),
@@ -60,9 +71,33 @@ CONFIG_SCHEMA = time_.TIME_SCHEMA.extend(
             accuracy_decimals=0,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
+        cv.Optional(CONF_NMEA_CLOCK_DELTA): sensor.sensor_schema(
+            icon="mdi:clock-alert",
+            unit_of_measurement="ms",
+            accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
         cv.Optional(CONF_GALILEO_SATELLITES): sensor.sensor_schema(
             icon="mdi:satellite-variant",
             accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_BEIDOU_SATELLITES): sensor.sensor_schema(
+            icon="mdi:satellite-variant",
+            accuracy_decimals=0,
+            state_class=STATE_CLASS_MEASUREMENT,
+        ),
+        cv.Optional(CONF_CRASH_INFO): text_sensor.text_sensor_schema(
+            icon="mdi:alert-circle-outline",
+        ),
+        # Design K diagnostic (docs/superpowers/plans/2026-09-09-p4-ntp-probe.md): the
+        # previous PPS anchor's prediction error at the next edge, i.e. the served-time error
+        # accumulated between two edges. Diagnostic only -- never fed back into the correction
+        # loop or the anchor itself.
+        cv.Optional(CONF_ANCHOR_PRED_ERROR): sensor.sensor_schema(
+            unit_of_measurement="µs",
+            icon="mdi:target-variant",
+            accuracy_decimals=1,
             state_class=STATE_CLASS_MEASUREMENT,
         ),
     }
@@ -88,6 +123,10 @@ async def to_code(config):
         sens = await sensor.new_sensor(offset_config)
         cg.add(var.set_clock_offset_sensor(sens))
 
+    if ppb_config := config.get(CONF_PPS_INTERVAL_PPB):
+        sens = await sensor.new_sensor(ppb_config)
+        cg.add(var.set_pps_interval_sensor(sens))
+
     if drift_config := config.get(CONF_PPS_DRIFT):
         sens = await sensor.new_sensor(drift_config)
         cg.add(var.set_pps_drift_sensor(sens))
@@ -107,3 +146,19 @@ async def to_code(config):
     if galileo_sat_config := config.get(CONF_GALILEO_SATELLITES):
         sens = await sensor.new_sensor(galileo_sat_config)
         cg.add(var.set_galileo_satellites_sensor(sens))
+
+    if crash_info_config := config.get(CONF_CRASH_INFO):
+        sens = await text_sensor.new_text_sensor(crash_info_config)
+        cg.add(var.set_crash_info_sensor(sens))
+
+    if nmea_delta_config := config.get(CONF_NMEA_CLOCK_DELTA):
+        sens = await sensor.new_sensor(nmea_delta_config)
+        cg.add(var.set_nmea_clock_delta_sensor(sens))
+
+    if anchor_pred_error_config := config.get(CONF_ANCHOR_PRED_ERROR):
+        sens = await sensor.new_sensor(anchor_pred_error_config)
+        cg.add(var.set_anchor_pred_error_sensor(sens))
+
+    if beidou_sat_config := config.get(CONF_BEIDOU_SATELLITES):
+        sens = await sensor.new_sensor(beidou_sat_config)
+        cg.add(var.set_beidou_satellites_sensor(sens))
