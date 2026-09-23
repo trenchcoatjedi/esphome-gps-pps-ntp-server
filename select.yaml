@@ -12,197 +12,28 @@ select:
     set_action:
       - if:
           condition:
-            lambda: 'return x == "BeiDou";'
+            lambda: |-
+              return x == "BeiDou";
           then:
-            # First disable GLONASS.
+            - logger.log: "Switching from GLONASS to BeiDou"
             - uart.write:
                 id: gps_uart
-                data: !lambda |-
-                  // UBX-CFG-GNSS
-                  // GPS, SBAS, BeiDou, QZSS enabled; GLONASS disabled.
-                  std::vector<uint8_t> frame = {
-                    0xB5, 0x62,       // UBX sync
-                    0x06, 0x3E,       // CFG-GNSS
-                    0x24, 0x00,       // Payload length: 36 bytes
-
-                    // Payload header:
-                    0x00,             // Message version
-                    0x20,             // Number of hardware tracking channels
-                    0x20,             // Number of channels to use
-                    0x05,             // Number of GNSS configuration blocks
-
-                    // GPS: enabled
-                    0x00, 0x08, 0x10, 0x00,
-                    0x01, 0x00, 0x01, 0x01,
-
-                    // SBAS: enabled
-                    0x01, 0x01, 0x03, 0x00,
-                    0x01, 0x00, 0x01, 0x01,
-
-                    // BeiDou: disabled
-                    0x03, 0x08, 0x10, 0x00,
-                    0x01, 0x00, 0x01, 0x00,
-
-                    // QZSS: enabled
-                    0x05, 0x00, 0x03, 0x00,
-                    0x01, 0x00, 0x01, 0x01,
-
-                    // GLONASS: disabled
-                    0x06, 0x08, 0x0E, 0x00,
-                    0x01, 0x00, 0x01, 0x00
-                  };
-
-                  uint8_t ck_a = 0;
-                  uint8_t ck_b = 0;
-
-                  for (size_t i = 2; i < frame.size(); i++) {
-                    ck_a = ck_a + frame[i];
-                    ck_b = ck_b + ck_a;
-                  }
-
-                  frame.push_back(ck_a);
-                  frame.push_back(ck_b);
-                  return frame;
+                data: [0x01]
 
             - delay: 500ms
 
-            # Then enable BeiDou.
             - uart.write:
                 id: gps_uart
-                data: !lambda |-
-                  // UBX-CFG-GNSS
-                  // GPS, SBAS, BeiDou, QZSS enabled; GLONASS disabled.
-                  std::vector<uint8_t> frame = {
-                    0xB5, 0x62,
-                    0x06, 0x3E,
-                    0x24, 0x00,
+                data: [0x02]
 
-                    0x00, 0x20, 0x20, 0x05,
+          else:
+            - logger.log: "Switching from BeiDou to GLONASS"
+            - uart.write:
+                id: gps_uart
+                data: [0x03]
 
-                    // GPS: enabled
-                    0x00, 0x08, 0x10, 0x00,
-                    0x01, 0x00, 0x01, 0x01,
+            - delay: 500ms
 
-                    // SBAS: enabled
-                    0x01, 0x01, 0x03, 0x00,
-                    0x01, 0x00, 0x01, 0x01,
-
-                    // BeiDou: enabled
-                    0x03, 0x08, 0x10, 0x00,
-                    0x01, 0x00, 0x01, 0x01,
-
-                    // QZSS: enabled
-                    0x05, 0x00, 0x03, 0x00,
-                    0x01, 0x00, 0x01, 0x01,
-
-                    // GLONASS: disabled
-                    0x06, 0x08, 0x0E, 0x00,
-                    0x01, 0x00, 0x01, 0x00
-                  };
-
-                  uint8_t ck_a = 0;
-                  uint8_t ck_b = 0;
-
-                  for (size_t i = 2; i < frame.size(); i++) {
-                    ck_a = ck_a + frame[i];
-                    ck_b = ck_b + ck_a;
-                  }
-
-                  frame.push_back(ck_a);
-                  frame.push_back(ck_b);
-                  return frame;
-
-        else:
-          # First disable BeiDou.
-          - uart.write:
-              id: gps_uart
-              data: !lambda |-
-                // UBX-CFG-GNSS
-                // GPS, SBAS, QZSS and GLONASS enabled; BeiDou disabled.
-                std::vector<uint8_t> frame = {
-                  0xB5, 0x62,
-                  0x06, 0x3E,
-                  0x24, 0x00,
-
-                  0x00, 0x20, 0x20, 0x05,
-
-                  // GPS: enabled
-                  0x00, 0x08, 0x10, 0x00,
-                  0x01, 0x00, 0x01, 0x01,
-
-                  // SBAS: enabled
-                  0x01, 0x01, 0x03, 0x00,
-                  0x01, 0x00, 0x01, 0x01,
-
-                  // BeiDou: disabled
-                  0x03, 0x08, 0x10, 0x00,
-                  0x01, 0x00, 0x01, 0x00,
-
-                  // QZSS: enabled
-                  0x05, 0x00, 0x03, 0x00,
-                  0x01, 0x00, 0x01, 0x01,
-
-                  // GLONASS: enabled
-                  0x06, 0x08, 0x0E, 0x00,
-                  0x01, 0x00, 0x01, 0x01
-                };
-
-                uint8_t ck_a = 0;
-                uint8_t ck_b = 0;
-
-                for (size_t i = 2; i < frame.size(); i++) {
-                  ck_a = ck_a + frame[i];
-                  ck_b = ck_b + ck_a;
-                }
-
-                frame.push_back(ck_a);
-                frame.push_back(ck_b);
-                return frame;
-
-          - delay: 500ms
-
-          # Then enable GLONASS.
-          - uart.write:
-              id: gps_uart
-              data: !lambda |-
-                // UBX-CFG-GNSS
-                // GPS, SBAS, QZSS and GLONASS enabled; BeiDou disabled.
-                std::vector<uint8_t> frame = {
-                  0xB5, 0x62,
-                  0x06, 0x3E,
-                  0x24, 0x00,
-
-                  0x00, 0x20, 0x20, 0x05,
-
-                  // GPS: enabled
-                  0x00, 0x08, 0x10, 0x00,
-                  0x01, 0x00, 0x01, 0x01,
-
-                  // SBAS: enabled
-                  0x01, 0x01, 0x03, 0x00,
-                  0x01, 0x00, 0x01, 0x01,
-
-                  // BeiDou: enabled
-                  0x03, 0x08, 0x10, 0x00,
-                  0x01, 0x00, 0x01, 0x01,
-
-                  // QZSS: enabled
-                  0x05, 0x00, 0x03, 0x00,
-                  0x01, 0x00, 0x01, 0x01,
-
-                  // GLONASS: enabled
-                  0x06, 0x08, 0x0E, 0x00,
-                  0x01, 0x00, 0x01, 0x01
-                };
-
-                uint8_t ck_a = 0;
-                uint8_t ck_b = 0;
-
-                for (size_t i = 2; i < frame.size(); i++) {
-                  ck_a = ck_a + frame[i];
-                  ck_b = ck_b + ck_a;
-                }
-
-                frame.push_back(ck_a);
-                frame.push_back(ck_b);
-                return frame;
+            - uart.write:
+                id: gps_uart
+                data: [0x04]
