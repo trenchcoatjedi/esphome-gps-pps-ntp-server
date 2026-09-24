@@ -862,11 +862,7 @@ script:
           id(active_constellation) =
             "BeiDou";
 
-
-      # Do NOT call publish_state() here.
-      #
-      # The select set_action already owns the selected value.
-      # We only update the internal state after successful ACK.
+          id(gnss_secondary_constellation)->publish_state("BeiDou");
 
 
   # ============================================================================
@@ -1634,7 +1630,7 @@ script:
           id(active_constellation) =
             "GLONASS";
 
-
+          id(gnss_secondary_constellation)->publish_state("GLONASS");
 # ==============================================================================
 # SELECTOR
 # ==============================================================================
