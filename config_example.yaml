@@ -1,7 +1,11 @@
 esphome:
   name: gps-ntp-server
   friendly_name: GPS NTP Server
-
+    on_boot:
+      then:
+        - delay: 30s
+        - component.update: gps_module
+        
 esp32:
   board: wt32-eth01
   framework:
@@ -42,6 +46,10 @@ external_components:
   - source: github://trenchcoatjedi/esphome-gps-pps-ntp-server@no-eth\
     refresh: 24h
 
+packages:
+  select_config:
+    files:
+      - select.yaml
 uart:
   id: gps_uart
   rx_pin: GPIO3
