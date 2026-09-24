@@ -46,10 +46,13 @@ external_components:
   - source: github://trenchcoatjedi/esphome-gps-pps-ntp-server@no-eth\
     refresh: 24h
 
-packages:
-  select_config:
-    files:
-      - select.yaml
+### Uncomment to add optional GLONASS to BeiDou select component ##
+
+# packages:
+#  select_config:
+#    files:
+#      - select.yaml
+
 uart:
   id: gps_uart
   rx_pin: GPIO3
