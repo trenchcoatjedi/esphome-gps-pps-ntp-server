@@ -9,32 +9,6 @@ script:
 
   # ==========================================================================
   # Switch to GPS + BeiDou
-  #
-  # Sends ONE complete UBX-CFG-GNSS configuration.
-  #
-  # Configuration:
-  #
-  #   GPS:
-  #     gnssId    = 0
-  #     resTrkCh  = 8
-  #     maxTrkCh  = 16
-  #     enabled
-  #
-  #   BeiDou:
-  #     gnssId    = 3
-  #     resTrkCh  = 8
-  #     maxTrkCh  = 16
-  #     enabled
-  #
-  #   GLONASS is omitted, therefore disabled.
-  #
-  # Payload:
-  #
-  #   msgVer          = 0
-  #   numTrkChHw      = 32
-  #   numTrkChUse     = 32
-  #   numConfigBlocks = 2
-  #
   # ==========================================================================
 
   - id: switch_to_beidou
@@ -49,6 +23,13 @@ script:
 
           // ------------------------------------------------------------------
           // Build UBX-CFG-GNSS
+          //
+          // GPS + BeiDou
+          //
+          // msgVer          = 0
+          // numTrkChHw      = 32
+          // numTrkChUse     = 32
+          // numConfigBlocks = 2
           // ------------------------------------------------------------------
 
           std::vector<uint8_t> msg = {
@@ -60,7 +41,7 @@ script:
             // ID    = GNSS
             0x06, 0x3E,
 
-            // Payload length = 20 bytes
+            // Payload length = 20
             0x14, 0x00,
 
             // --------------------------------------------------------------
@@ -71,7 +52,6 @@ script:
             0x00,
 
             // numTrkChHw
-            // M8030 configuration used by this project = 32
             0x20,
 
             // numTrkChUse
@@ -80,8 +60,9 @@ script:
             // numConfigBlocks
             0x02,
 
+
             // --------------------------------------------------------------
-            // GPS block
+            // GPS
             // --------------------------------------------------------------
 
             // gnssId = GPS
@@ -97,14 +78,11 @@ script:
             0x00,
 
             // flags = 0x01010001
-            //
-            // bit 0      = enabled
-            // sigCfgMask = 0x01 (GPS L1 C/A)
-            //
             0x01, 0x00, 0x01, 0x01,
 
+
             // --------------------------------------------------------------
-            // BeiDou block
+            // BeiDou
             // --------------------------------------------------------------
 
             // gnssId = BeiDou
@@ -120,19 +98,12 @@ script:
             0x00,
 
             // flags = 0x01010001
-            //
-            // bit 0      = enabled
-            // sigCfgMask = 0x01 (BeiDou B1I)
-            //
             0x01, 0x00, 0x01, 0x01
           };
 
 
           // ------------------------------------------------------------------
-          // UBX Fletcher checksum
-          //
-          // Checksum covers:
-          //   class through final payload byte
+          // Calculate UBX Fletcher checksum
           // ------------------------------------------------------------------
 
           uint8_t ck_a = 0;
@@ -148,10 +119,7 @@ script:
 
 
           // ------------------------------------------------------------------
-          // Drain stale data from the ESPHome UART receive buffer.
-          //
-          // This prevents an old NMEA sentence or previous UBX response from
-          // being mistaken for the ACK we're waiting for.
+          // Drain anything currently waiting in the UART RX buffer.
           // ------------------------------------------------------------------
 
           uint8_t discard;
@@ -169,7 +137,7 @@ script:
 
 
           // ------------------------------------------------------------------
-          // Send configuration
+          // Send CFG-GNSS
           // ------------------------------------------------------------------
 
           id(gps_uart)->write_array(msg.data(), msg.size());
@@ -177,20 +145,17 @@ script:
 
 
           // ------------------------------------------------------------------
-          // Wait for UBX-ACK-ACK or UBX-ACK-NAK.
+          // Wait for UBX-ACK-ACK or UBX-ACK-NAK
           //
-          // Expected ACK:
+          // ACK-ACK:
+          // B5 62 05 01 02 00 06 3E CK_A CK_B
           //
-          //   B5 62 05 01 02 00 06 3E CK_A CK_B
-          //
-          // Expected NAK:
-          //
-          //   B5 62 05 00 02 00 06 3E CK_A CK_B
-          //
+          // ACK-NAK:
+          // B5 62 05 00 02 00 06 3E CK_A CK_B
           // ------------------------------------------------------------------
 
           const uint32_t timeout_ms = 1500;
-          const uint32_t start_ms = millis();
+          const uint32_t start_ms = esphome::millis();
 
           uint8_t state = 0;
 
@@ -206,7 +171,7 @@ script:
           bool ack_ok = false;
 
 
-          while ((millis() - start_ms) < timeout_ms) {
+          while ((esphome::millis() - start_ms) < timeout_ms) {
 
             if (id(gps_uart)->available() == 0) {
               delay(1);
@@ -226,52 +191,83 @@ script:
 
             switch (state) {
 
-              // Waiting for first sync byte
+              // ------------------------------------------------------------
+              // Sync byte 1
+              // ------------------------------------------------------------
+
               case 0:
+
                 if (c == 0xB5) {
                   state = 1;
                 }
+
                 break;
 
 
-              // Waiting for second sync byte
+              // ------------------------------------------------------------
+              // Sync byte 2
+              // ------------------------------------------------------------
+
               case 1:
+
                 if (c == 0x62) {
+
                   state = 2;
+
                 } else if (c == 0xB5) {
+
                   state = 1;
+
                 } else {
+
                   state = 0;
                 }
+
                 break;
 
 
+              // ------------------------------------------------------------
               // Class
+              // ------------------------------------------------------------
+
               case 2:
+
                 ack_class = c;
+
                 rx_ck_a = c;
                 rx_ck_b = rx_ck_a;
+
                 state = 3;
+
                 break;
 
 
+              // ------------------------------------------------------------
               // Message ID
+              // ------------------------------------------------------------
+
               case 3:
+
                 ack_id = c;
 
                 rx_ck_a += c;
                 rx_ck_b += rx_ck_a;
 
                 state = 4;
+
                 break;
 
 
-              // ACK payload length LSB
+              // ------------------------------------------------------------
+              // Length LSB
+              // ------------------------------------------------------------
+
               case 4:
 
-                // ACK messages must have a 2-byte payload.
                 if (c != 0x02) {
+
                   state = 0;
+
                   break;
                 }
 
@@ -279,14 +275,20 @@ script:
                 rx_ck_b += rx_ck_a;
 
                 state = 5;
+
                 break;
 
 
-              // ACK payload length MSB
+              // ------------------------------------------------------------
+              // Length MSB
+              // ------------------------------------------------------------
+
               case 5:
 
                 if (c != 0x00) {
+
                   state = 0;
+
                   break;
                 }
 
@@ -294,10 +296,14 @@ script:
                 rx_ck_b += rx_ck_a;
 
                 state = 6;
+
                 break;
 
 
-              // ACK payload byte 0
+              // ------------------------------------------------------------
+              // Payload byte 0
+              // ------------------------------------------------------------
+
               case 6:
 
                 ack_payload[0] = c;
@@ -306,10 +312,14 @@ script:
                 rx_ck_b += rx_ck_a;
 
                 state = 7;
+
                 break;
 
 
-              // ACK payload byte 1
+              // ------------------------------------------------------------
+              // Payload byte 1
+              // ------------------------------------------------------------
+
               case 7:
 
                 ack_payload[1] = c;
@@ -318,48 +328,62 @@ script:
                 rx_ck_b += rx_ck_a;
 
                 state = 8;
+
                 break;
 
 
+              // ------------------------------------------------------------
               // Checksum A
+              // ------------------------------------------------------------
+
               case 8:
 
                 if (c != rx_ck_a) {
+
                   ESP_LOGW(
                     "gnss",
                     "Invalid UBX ACK checksum A"
                   );
 
                   state = 0;
+
                   break;
                 }
 
                 state = 9;
+
                 break;
 
 
+              // ------------------------------------------------------------
               // Checksum B
+              // ------------------------------------------------------------
+
               case 9:
 
                 if (c != rx_ck_b) {
+
                   ESP_LOGW(
                     "gnss",
                     "Invalid UBX ACK checksum B"
                   );
 
                   state = 0;
+
                   break;
                 }
 
 
-                // We have a valid UBX message.
+                // ----------------------------------------------------------
+                // Valid ACK packet.
                 //
-                // ACK-ACK = class 0x05, id 0x01
-                // ACK-NAK = class 0x05, id 0x00
+                // ACK-ACK = 0x05 / 0x01
+                // ACK-NAK = 0x05 / 0x00
                 //
-                // Payload must identify CFG-GNSS:
-                //   class = 0x06
-                //   id    = 0x3E
+                // Payload:
+                //   0x06 = CFG class
+                //   0x3E = CFG-GNSS
+                // ----------------------------------------------------------
 
                 if (
                   ack_class == 0x05 &&
@@ -371,20 +395,17 @@ script:
                   ack_received = true;
                   ack_ok = (ack_id == 0x01);
 
-                  state = 10;
-
-                } else {
-
-                  // It was another valid UBX packet.
-                  // Ignore it and continue looking for our ACK.
-                  state = 0;
                 }
+
+                state = 0;
 
                 break;
 
 
               default:
+
                 state = 0;
+
                 break;
             }
 
@@ -406,40 +427,50 @@ script:
               "CFG-GNSS GPS + BeiDou: NO ACK received"
             );
 
-            return;
-          }
-
-
-          if (!ack_ok) {
+          } else if (!ack_ok) {
 
             ESP_LOGE(
               "gnss",
               "CFG-GNSS GPS + BeiDou: RECEIVER RETURNED NAK"
             );
 
-            return;
+          } else {
+
+            ESP_LOGI(
+              "gnss",
+              "CFG-GNSS GPS + BeiDou: ACK-ACK received"
+            );
           }
 
 
-          ESP_LOGI(
-            "gnss",
-            "CFG-GNSS GPS + BeiDou: ACK-ACK received"
-          );
+          // Store result in the global.
+          //
+          // "BeiDou" means the receiver accepted the command.
+          // Empty string means the command failed.
+
+          if (ack_received && ack_ok) {
+
+            id(active_constellation) = "BeiDou";
+
+          }
 
 
-      # Give the receiver time to apply the new GNSS channel allocation.
+      # Give receiver time to apply configuration.
       - delay: 750ms
 
 
-      # Only update the UI/state after a successful configuration.
       - lambda: |-
-          id(active_constellation) = "BeiDou";
-          id(gnss_secondary_constellation).publish_state("BeiDou");
 
-          ESP_LOGI(
-            "gnss",
-            "GNSS successfully switched to GPS + BeiDou"
-          );
+          if (id(active_constellation) == "BeiDou") {
+
+            id(gnss_secondary_constellation).publish_state("BeiDou");
+
+            ESP_LOGI(
+              "gnss",
+              "GNSS successfully switched to GPS + BeiDou"
+            );
+
+          }
 
 
   # ==========================================================================
@@ -458,6 +489,8 @@ script:
 
           // ------------------------------------------------------------------
           // Build UBX-CFG-GNSS
+          //
+          // GPS + GLONASS
           // ------------------------------------------------------------------
 
           std::vector<uint8_t> msg = {
@@ -469,7 +502,7 @@ script:
             // ID    = GNSS
             0x06, 0x3E,
 
-            // Payload length = 20 bytes
+            // Payload length = 20
             0x14, 0x00,
 
             // --------------------------------------------------------------
@@ -490,7 +523,7 @@ script:
 
 
             // --------------------------------------------------------------
-            // GPS block
+            // GPS
             // --------------------------------------------------------------
 
             // gnssId = GPS
@@ -506,12 +539,11 @@ script:
             0x00,
 
             // flags = 0x01010001
-            // GPS L1 C/A enabled
             0x01, 0x00, 0x01, 0x01,
 
 
             // --------------------------------------------------------------
-            // GLONASS block
+            // GLONASS
             // --------------------------------------------------------------
 
             // gnssId = GLONASS
@@ -527,13 +559,12 @@ script:
             0x00,
 
             // flags = 0x01010001
-            // GLONASS L1 enabled
             0x01, 0x00, 0x01, 0x01
           };
 
 
           // ------------------------------------------------------------------
-          // UBX Fletcher checksum
+          // Calculate UBX Fletcher checksum
           // ------------------------------------------------------------------
 
           uint8_t ck_a = 0;
@@ -575,11 +606,11 @@ script:
 
 
           // ------------------------------------------------------------------
-          // Wait for ACK-ACK or ACK-NAK
+          // Wait for UBX-ACK-ACK or UBX-ACK-NAK
           // ------------------------------------------------------------------
 
           const uint32_t timeout_ms = 1500;
-          const uint32_t start_ms = millis();
+          const uint32_t start_ms = esphome::millis();
 
           uint8_t state = 0;
 
@@ -595,7 +626,7 @@ script:
           bool ack_ok = false;
 
 
-          while ((millis() - start_ms) < timeout_ms) {
+          while ((esphome::millis() - start_ms) < timeout_ms) {
 
             if (id(gps_uart)->available() == 0) {
               delay(1);
@@ -609,45 +640,64 @@ script:
             }
 
 
+            // --------------------------------------------------------------
+            // UBX parser
+            // --------------------------------------------------------------
+
             switch (state) {
 
               // Sync byte 1
               case 0:
+
                 if (c == 0xB5) {
                   state = 1;
                 }
+
                 break;
 
 
               // Sync byte 2
               case 1:
+
                 if (c == 0x62) {
+
                   state = 2;
+
                 } else if (c == 0xB5) {
+
                   state = 1;
+
                 } else {
+
                   state = 0;
                 }
+
                 break;
 
 
               // Class
               case 2:
+
                 ack_class = c;
+
                 rx_ck_a = c;
                 rx_ck_b = rx_ck_a;
+
                 state = 3;
+
                 break;
 
 
-              // ID
+              // Message ID
               case 3:
+
                 ack_id = c;
 
                 rx_ck_a += c;
                 rx_ck_b += rx_ck_a;
 
                 state = 4;
+
                 break;
 
 
@@ -655,7 +705,9 @@ script:
               case 4:
 
                 if (c != 0x02) {
+
                   state = 0;
+
                   break;
                 }
 
@@ -663,6 +715,7 @@ script:
                 rx_ck_b += rx_ck_a;
 
                 state = 5;
+
                 break;
 
 
@@ -670,7 +723,9 @@ script:
               case 5:
 
                 if (c != 0x00) {
+
                   state = 0;
+
                   break;
                 }
 
@@ -678,6 +733,7 @@ script:
                 rx_ck_b += rx_ck_a;
 
                 state = 6;
+
                 break;
 
 
@@ -690,6 +746,7 @@ script:
                 rx_ck_b += rx_ck_a;
 
                 state = 7;
+
                 break;
 
 
@@ -702,6 +759,7 @@ script:
                 rx_ck_b += rx_ck_a;
 
                 state = 8;
+
                 break;
 
 
@@ -716,10 +774,12 @@ script:
                   );
 
                   state = 0;
+
                   break;
                 }
 
                 state = 9;
+
                 break;
 
 
@@ -734,9 +794,14 @@ script:
                   );
 
                   state = 0;
+
                   break;
                 }
 
+
+                // ----------------------------------------------------------
+                // Check whether this is our CFG-GNSS ACK.
+                // ----------------------------------------------------------
 
                 if (
                   ack_class == 0x05 &&
@@ -748,19 +813,17 @@ script:
                   ack_received = true;
                   ack_ok = (ack_id == 0x01);
 
-                  state = 10;
-
-                } else {
-
-                  // Valid UBX packet, but not our ACK.
-                  state = 0;
                 }
+
+                state = 0;
 
                 break;
 
 
               default:
+
                 state = 0;
+
                 break;
             }
 
@@ -782,40 +845,47 @@ script:
               "CFG-GNSS GPS + GLONASS: NO ACK received"
             );
 
-            return;
-          }
-
-
-          if (!ack_ok) {
+          } else if (!ack_ok) {
 
             ESP_LOGE(
               "gnss",
               "CFG-GNSS GPS + GLONASS: RECEIVER RETURNED NAK"
             );
 
-            return;
+          } else {
+
+            ESP_LOGI(
+              "gnss",
+              "CFG-GNSS GPS + GLONASS: ACK-ACK received"
+            );
           }
 
 
-          ESP_LOGI(
-            "gnss",
-            "CFG-GNSS GPS + GLONASS: ACK-ACK received"
-          );
+          // Store result only after successful ACK.
+
+          if (ack_received && ack_ok) {
+
+            id(active_constellation) = "GLONASS";
+
+          }
 
 
-      # Give the receiver time to apply the new GNSS channel allocation.
+      # Give receiver time to apply configuration.
       - delay: 750ms
 
 
-      # Only update the UI/state after successful configuration.
       - lambda: |-
-          id(active_constellation) = "GLONASS";
-          id(gnss_secondary_constellation).publish_state("GLONASS");
 
-          ESP_LOGI(
-            "gnss",
-            "GNSS successfully switched to GPS + GLONASS"
-          );
+          if (id(active_constellation) == "GLONASS") {
+
+            id(gnss_secondary_constellation).publish_state("GLONASS");
+
+            ESP_LOGI(
+              "gnss",
+              "GNSS successfully switched to GPS + GLONASS"
+            );
+
+          }
 
 
 # ==============================================================================
@@ -823,13 +893,15 @@ script:
 # ==============================================================================
 
 select:
+
   - platform: template
+
     name: "GNSS Secondary Constellation Selector"
+
     id: gnss_secondary_constellation
 
     restore_value: false
 
-    # State is explicitly updated by the scripts after a successful ACK.
     optimistic: true
 
     initial_option: "GLONASS"
@@ -861,7 +933,9 @@ select:
                     return x == "BeiDou";
 
                 then:
+
                   - script.execute: switch_to_beidou
 
                 else:
+
                   - script.execute: switch_to_glonass
