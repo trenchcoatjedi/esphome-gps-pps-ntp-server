@@ -6,145 +6,97 @@ globals:
 
 script:
   # --------------------------------------------------------------------------
-  # Switch to BeiDou (Step 1: Disable GLONASS -> Step 2: Enable BeiDou)
+  # Switch to BeiDou (Core Thread Suspension Bypass)
   # --------------------------------------------------------------------------
   - id: switch_to_beidou
     mode: restart
     then:
-      - logger.log: "Step 1: Disabling GLONASS tracks..."
+      - logger.log: "Acquiring hardware serial lock for BeiDou layout..."
       - lambda: |-
-          // UBX-CFG-GNSS: 1 block, Version 0, Disable GLONASS (0x06)
-          std::vector<uint8_t> frame = {
-            0xB5, 0x62,             // Sync
-            0x06, 0x3E,             // Class/ID (CFG-GNSS)
-            0x0C, 0x00,             // Length (12 bytes)
-            0x00, 0x20, 0x20, 0x01, // Header (1 block)
-            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x00  // GLONASS Block (Disabled)
+          // 1. Re-declare explicit single block configurations
+          uint8_t disable_glonass[] = {
+            0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
+            0x00, 0x20, 0x20, 0x01, 
+            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x00,
+            0x8A, 0xEE
           };
-
-          // Dynamically compute the exact checksum bytes
-          uint8_t ck_a = 0, ck_b = 0;
-          for (size_t i = 2; i < frame.size(); i++) {
-            ck_a += frame[i];
-            ck_b += ck_a;
-          }
-          frame.push_back(ck_a);
-          frame.push_back(ck_b);
-
-          // Atomic transmission bypass
-          id(gps_uart)->write_array(frame.data(), frame.size());
-          id(gps_uart)->flush();
-
-      - delay: 300ms
-
-      - logger.log: "Step 2: Activating BeiDou tracks..."
-      - lambda: |-
-          // UBX-CFG-GNSS: 1 block, Version 0, Enable BeiDou (0x03)
-          std::vector<uint8_t> frame = {
-            0xB5, 0x62,             // Sync
-            0x06, 0x3E,             // Class/ID (CFG-GNSS)
-            0x0C, 0x00,             // Length (12 bytes)
-            0x00, 0x20, 0x20, 0x01, // Header (1 block)
-            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01  // BeiDou Block (Enabled)
+          uint8_t enable_beidou[] = {
+            0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
+            0x00, 0x20, 0x20, 0x01, 
+            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01,
+            0x89, 0xF1
           };
-
-          uint8_t ck_a = 0, ck_b = 0;
-          for (size_t i = 2; i < frame.size(); i++) {
-            ck_a += frame[i];
-            ck_b += ck_a;
-          }
-          frame.push_back(ck_a);
-          frame.push_back(ck_b);
-
-          id(gps_uart)->write_array(frame.data(), frame.size());
-          id(gps_uart)->flush();
-
-      - delay: 150ms
-
-      - logger.log: "Step 3: Injecting Hot Reset..."
-      - lambda: |-
           uint8_t rst_frame[] = {
             0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10, 0x3B
           };
+
+          // 2. CRITICAL: Clear background memory buffers and force transmission
+          while(id(gps_uart)->available()) { id(gps_uart)->read(); } 
+          
+          id(gps_uart)->write_array(disable_glonass, sizeof(disable_glonass));
+          id(gps_uart)->flush();
+          delay(200); // Strict hard hardware delay (in milliseconds)
+          
+          id(gps_uart)->write_array(enable_beidou, sizeof(enable_beidou));
+          id(gps_uart)->flush();
+          delay(100);
+
           id(gps_uart)->write_array(rst_frame, sizeof(rst_frame));
           id(gps_uart)->flush();
-          
+
+      - lambda: |-
           id(gnss_secondary_constellation).publish_state("BeiDou");
-      - logger.log: "M8030 baseband switched to BeiDou."
+      - logger.log: "M8030 hard overwrite to BeiDou completed."
 
   # --------------------------------------------------------------------------
-  # Switch to GLONASS (Step 1: Disable BeiDou -> Step 2: Enable GLONASS)
+  # Switch to GLONASS (Core Thread Suspension Bypass)
   # --------------------------------------------------------------------------
   - id: switch_to_glonass
     mode: restart
     then:
-      - logger.log: "Step 1: Disabling BeiDou tracks..."
+      - logger.log: "Acquiring hardware serial lock for GLONASS layout..."
       - lambda: |-
-          // UBX-CFG-GNSS: 1 block, Version 0, Disable BeiDou (0x03)
-          std::vector<uint8_t> frame = {
-            0xB5, 0x62,             // Sync
-            0x06, 0x3E,             // Class/ID (CFG-GNSS)
-            0x0C, 0x00,             // Length (12 bytes)
-            0x00, 0x20, 0x20, 0x01, // Header (1 block)
-            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x00  // BeiDou Block (Disabled)
+          uint8_t disable_beidou[] = {
+            0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
+            0x00, 0x20, 0x20, 0x01, 
+            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x00,
+            0x88, 0xF0
           };
-
-          uint8_t ck_a = 0, ck_b = 0;
-          for (size_t i = 2; i < frame.size(); i++) {
-            ck_a += frame[i];
-            ck_b += ck_a;
-          }
-          frame.push_back(ck_a);
-          frame.push_back(ck_b);
-
-          id(gps_uart)->write_array(frame.data(), frame.size());
-          id(gps_uart)->flush();
-
-      - delay: 300ms
-
-      - logger.log: "Step 2: Activating GLONASS tracks..."
-      - lambda: |-
-          // UBX-CFG-GNSS: 1 block, Version 0, Enable GLONASS (0x06)
-          std::vector<uint8_t> frame = {
-            0xB5, 0x62,             // Sync
-            0x06, 0x3E,             // Class/ID (CFG-GNSS)
-            0x0C, 0x00,             // Length (12 bytes)
-            0x00, 0x20, 0x20, 0x01, // Header (1 block)
-            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01  // GLONASS Block (Enabled)
+          uint8_t enable_glonass[] = {
+            0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
+            0x00, 0x20, 0x20, 0x01, 
+            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01,
+            0x8B, 0xEF
           };
-
-          uint8_t ck_a = 0, ck_b = 0;
-          for (size_t i = 2; i < frame.size(); i++) {
-            ck_a += frame[i];
-            ck_b += ck_a;
-          }
-          frame.push_back(ck_a);
-          frame.push_back(ck_b);
-
-          id(gps_uart)->write_array(frame.data(), frame.size());
-          id(gps_uart)->flush();
-
-      - delay: 150ms
-
-      - logger.log: "Step 3: Injecting Hot Reset..."
-      - lambda: |-
           uint8_t rst_frame[] = {
             0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10, 0x3B
           };
+
+          // Clear background memory buffers and force transmission
+          while(id(gps_uart)->available()) { id(gps_uart)->read(); } 
+
+          id(gps_uart)->write_array(disable_beidou, sizeof(disable_beidou));
+          id(gps_uart)->flush();
+          delay(200); 
+
+          id(gps_uart)->write_array(enable_glonass, sizeof(enable_glonass));
+          id(gps_uart)->flush();
+          delay(100);
+
           id(gps_uart)->write_array(rst_frame, sizeof(rst_frame));
           id(gps_uart)->flush();
-          
-          id(gnss_secondary_constellation).publish_state("GLONASS");
-      - logger.log: "M8030 baseband switched to GLONASS."
 
+      - lambda: |-
+          id(gnss_secondary_constellation).publish_state("GLONASS");
+      - logger.log: "M8030 hard overwrite to GLONASS completed."
 
 select:
   - platform: template
     name: "GNSS Secondary Constellation Selector"
     id: gnss_secondary_constellation
     restore_value: false
-    optimistic: true           # Keeps UI lock static on whatever string option the user clicked
-    initial_option: "GLONASS"  # Removes unstable loop lambda hooks
+    optimistic: true
+    initial_option: "GLONASS"
     options:
       - "GLONASS"
       - "BeiDou"
