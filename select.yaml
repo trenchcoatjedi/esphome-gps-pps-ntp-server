@@ -108,7 +108,6 @@ select:
   - platform: template
     name: "GNSS Secondary Constellation Selector"
     id: gnss_secondary_constellation
-    restore_value: false
     lambda: |-
       return id(active_constellation);
     options:
