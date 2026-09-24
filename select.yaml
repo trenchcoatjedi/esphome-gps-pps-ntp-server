@@ -6,84 +6,104 @@ globals:
 
 script:
   # --------------------------------------------------------------------------
-  # Switch to BeiDou (Core Thread Suspension Bypass)
+  # Switch to BeiDou (ESP-IDF Compliant Sequential Clear)
   # --------------------------------------------------------------------------
   - id: switch_to_beidou
     mode: restart
     then:
       - logger.log: "Acquiring hardware serial lock for BeiDou layout..."
       - lambda: |-
-          // 1. Re-declare explicit single block configurations
-          uint8_t disable_glonass[] = {
+          // 1. Declare frames dynamically to compute mathematically perfect checksums
+          std::vector<uint8_t> disable_glonass = {
             0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
             0x00, 0x20, 0x20, 0x01, 
-            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x00,
-            0x8A, 0xEE
+            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x00
           };
-          uint8_t enable_beidou[] = {
+          std::vector<uint8_t> enable_beidou = {
             0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
             0x00, 0x20, 0x20, 0x01, 
-            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01,
-            0x89, 0xF1
+            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01
           };
-          uint8_t rst_frame[] = {
+          std::vector<uint8_t> rst_frame = {
             0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10, 0x3B
           };
 
-          // 2. CRITICAL: Clear background memory buffers and force transmission
-          while(id(gps_uart)->available()) { id(gps_uart)->read(); } 
+          // Lambda helper to attach correct u-blox Fletcher-8 checksums
+          auto apply_ubx_checksum = [](std::vector<uint8_t> &f) {
+            uint8_t ck_a = 0, ck_b = 0;
+            for (size_t i = 2; i < f.size(); i++) { ck_a += f[i]; ck_b += ck_a; }
+            f.push_back(ck_a); f.push_back(ck_b);
+          };
+          apply_ubx_checksum(disable_glonass);
+          apply_ubx_checksum(enable_beidou);
+
+          // 2. FIX: Drain the ESP-IDF hardware buffers using the proper component method
+          uint8_t dummy_byte;
+          while(id(gps_uart)->available() > 0) { 
+            id(gps_uart)->read_byte(&dummy_byte); 
+          } 
           
-          id(gps_uart)->write_array(disable_glonass, sizeof(disable_glonass));
+          // 3. Sequential Write Transactions with Hard Block Halts
+          id(gps_uart)->write_array(disable_glonass.data(), disable_glonass.size());
           id(gps_uart)->flush();
-          delay(200); // Strict hard hardware delay (in milliseconds)
+          delay(200); 
           
-          id(gps_uart)->write_array(enable_beidou, sizeof(enable_beidou));
+          id(gps_uart)->write_array(enable_beidou.data(), enable_beidou.size());
           id(gps_uart)->flush();
           delay(100);
 
-          id(gps_uart)->write_array(rst_frame, sizeof(rst_frame));
+          id(gps_uart)->write_array(rst_frame.data(), rst_frame.size());
           id(gps_uart)->flush();
 
       - lambda: |-
           id(gnss_secondary_constellation).publish_state("BeiDou");
-      - logger.log: "M8030 hard overwrite to BeiDou completed."
+      - logger.log: "M8030 baseband switched to BeiDou."
 
   # --------------------------------------------------------------------------
-  # Switch to GLONASS (Core Thread Suspension Bypass)
+  # Switch to GLONASS (ESP-IDF Compliant Sequential Clear)
   # --------------------------------------------------------------------------
   - id: switch_to_glonass
     mode: restart
     then:
       - logger.log: "Acquiring hardware serial lock for GLONASS layout..."
       - lambda: |-
-          uint8_t disable_beidou[] = {
+          std::vector<uint8_t> disable_beidou = {
             0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
             0x00, 0x20, 0x20, 0x01, 
-            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x00,
-            0x88, 0xF0
+            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x00
           };
-          uint8_t enable_glonass[] = {
+          std::vector<uint8_t> enable_glonass = {
             0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
             0x00, 0x20, 0x20, 0x01, 
-            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01,
-            0x8B, 0xEF
+            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01
           };
-          uint8_t rst_frame[] = {
+          std::vector<uint8_t> rst_frame = {
             0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10, 0x3B
           };
 
-          // Clear background memory buffers and force transmission
-          while(id(gps_uart)->available()) { id(gps_uart)->read(); } 
+          auto apply_ubx_checksum = [](std::vector<uint8_t> &f) {
+            uint8_t ck_a = 0, ck_b = 0;
+            for (size_t i = 2; i < f.size(); i++) { ck_a += f[i]; ck_b += ck_a; }
+            f.push_back(ck_a); f.push_back(ck_b);
+          };
+          apply_ubx_checksum(disable_beidou);
+          apply_ubx_checksum(enable_glonass);
 
-          id(gps_uart)->write_array(disable_beidou, sizeof(disable_beidou));
+          // Drain the ESP-IDF hardware buffers using the proper component method
+          uint8_t dummy_byte;
+          while(id(gps_uart)->available() > 0) { 
+            id(gps_uart)->read_byte(&dummy_byte); 
+          } 
+
+          id(gps_uart)->write_array(disable_beidou.data(), disable_beidou.size());
           id(gps_uart)->flush();
           delay(200); 
 
-          id(gps_uart)->write_array(enable_glonass, sizeof(enable_glonass));
+          id(gps_uart)->write_array(enable_glonass.data(), enable_glonass.size());
           id(gps_uart)->flush();
           delay(100);
 
-          id(gps_uart)->write_array(rst_frame, sizeof(rst_frame));
+          id(gps_uart)->write_array(rst_frame.data(), rst_frame.size());
           id(gps_uart)->flush();
 
       - lambda: |-
