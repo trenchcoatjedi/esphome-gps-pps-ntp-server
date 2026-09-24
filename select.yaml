@@ -4,6 +4,12 @@ globals:
     restore_value: no
     initial_value: '"GLONASS"'
 
+button:
+  - platform: template
+    name: "Dump GNSS Configuration"
+    on_press:
+      - script.execute: dump_gnss_config
+
 
 script:
 
@@ -11,6 +17,312 @@ script:
   # Switch to GPS + BeiDou
   # ==========================================================================
 
+  - id: dump_gnss_config
+    mode: single
+    then:
+
+      - lambda: |-
+
+          ESP_LOGI("gnss", "Polling receiver with UBX-CFG-GNSS...");
+
+          // ---------------------------------------------------------------
+          // UBX-CFG-GNSS poll
+          //
+          // B5 62 06 3E 00 00 44 D2
+          // ---------------------------------------------------------------
+
+          const uint8_t poll[] = {
+            0xB5, 0x62,
+            0x06, 0x3E,
+            0x00, 0x00,
+            0x44, 0xD2
+          };
+
+
+          // Drain old data first.
+
+          uint8_t discard;
+
+          while (id(gps_uart)->available() > 0) {
+            id(gps_uart)->read_byte(&discard);
+          }
+
+
+          id(gps_uart)->write_array(
+            poll,
+            sizeof(poll)
+          );
+
+          id(gps_uart)->flush();
+
+
+          // ---------------------------------------------------------------
+          // Wait for UBX-CFG-GNSS response.
+          // ---------------------------------------------------------------
+
+          const uint32_t timeout_ms = 2000;
+          const uint32_t start_ms = esphome::millis();
+
+          std::vector<uint8_t> response;
+
+          bool sync1 = false;
+          bool sync2 = false;
+
+          uint16_t expected_length = 0;
+
+
+          while (
+            (esphome::millis() - start_ms) < timeout_ms
+          ) {
+
+            if (id(gps_uart)->available() == 0) {
+              delay(1);
+              continue;
+            }
+
+
+            uint8_t c;
+
+            if (!id(gps_uart)->read_byte(&c)) {
+              continue;
+            }
+
+
+            // -------------------------------------------------------------
+            // Find UBX sync
+            // -------------------------------------------------------------
+
+            if (!sync1) {
+
+              if (c == 0xB5) {
+                sync1 = true;
+              }
+
+              continue;
+            }
+
+
+            if (!sync2) {
+
+              if (c == 0x62) {
+
+                sync2 = true;
+                response.clear();
+
+              } else {
+
+                sync1 = (c == 0xB5);
+                sync2 = false;
+              }
+
+              continue;
+            }
+
+
+            // -------------------------------------------------------------
+            // Collect complete UBX message.
+            //
+            // response contains:
+            //   class
+            //   id
+            //   length LSB
+            //   length MSB
+            //   payload
+            //   CK_A
+            //   CK_B
+            // -------------------------------------------------------------
+
+            response.push_back(c);
+
+
+            if (response.size() == 4) {
+
+              expected_length =
+                response[2] |
+                (uint16_t(response[3]) << 8);
+
+            }
+
+
+            if (
+              response.size() >=
+              (size_t)(6 + expected_length)
+            ) {
+
+              break;
+            }
+          }
+
+
+          // ---------------------------------------------------------------
+          // Validate response
+          // ---------------------------------------------------------------
+
+          if (response.size() < 6) {
+
+            ESP_LOGE(
+              "gnss",
+              "No CFG-GNSS response received"
+            );
+
+            return;
+          }
+
+
+          if (
+            response[0] != 0x06 ||
+            response[1] != 0x3E
+          ) {
+
+            ESP_LOGE(
+              "gnss",
+              "Received unexpected UBX message: class=0x%02X id=0x%02X",
+              response[0],
+              response[1]
+            );
+
+            return;
+          }
+
+
+          const uint16_t payload_length =
+            response[2] |
+            (uint16_t(response[3]) << 8);
+
+
+          if (
+            payload_length < 4 ||
+            response.size() <
+              (size_t)(6 + payload_length)
+          ) {
+
+            ESP_LOGE(
+              "gnss",
+              "Invalid CFG-GNSS response length"
+            );
+
+            return;
+          }
+
+
+          const uint8_t *p = &response[4];
+
+
+          // ---------------------------------------------------------------
+          // Decode header
+          // ---------------------------------------------------------------
+
+          const uint8_t msgVer = p[0];
+          const uint8_t numTrkChHw = p[1];
+          const uint8_t numTrkChUse = p[2];
+          const uint8_t numBlocks = p[3];
+
+
+          ESP_LOGI(
+            "gnss",
+            "CFG-GNSS: msgVer=%u hwChannels=%u useChannels=%u blocks=%u",
+            msgVer,
+            numTrkChHw,
+            numTrkChUse,
+            numBlocks
+          );
+
+
+          // ---------------------------------------------------------------
+          // Decode every configuration block.
+          // ---------------------------------------------------------------
+
+          for (
+            uint8_t i = 0;
+            i < numBlocks;
+            i++
+          ) {
+
+            const uint8_t *b =
+              p + 4 + (i * 8);
+
+
+            if (
+              (4 + ((i + 1) * 8)) >
+              payload_length
+            ) {
+
+              ESP_LOGE(
+                "gnss",
+                "CFG-GNSS block extends beyond payload"
+              );
+
+              break;
+            }
+
+
+            const uint8_t gnssId = b[0];
+            const uint8_t resTrkCh = b[1];
+            const uint8_t maxTrkCh = b[2];
+
+            const uint32_t flags =
+              uint32_t(b[4]) |
+              (uint32_t(b[5]) << 8) |
+              (uint32_t(b[6]) << 16) |
+              (uint32_t(b[7]) << 24);
+
+
+            const bool enabled =
+              (flags & 0x00000001) != 0;
+
+
+            const char *name = "UNKNOWN";
+
+
+            switch (gnssId) {
+
+              case 0:
+                name = "GPS";
+                break;
+
+              case 1:
+                name = "SBAS";
+                break;
+
+              case 2:
+                name = "Galileo";
+                break;
+
+              case 3:
+                name = "BeiDou";
+                break;
+
+              case 4:
+                name = "IMES";
+                break;
+
+              case 5:
+                name = "QZSS";
+                break;
+
+              case 6:
+                name = "GLONASS";
+                break;
+            }
+
+
+            ESP_LOGI(
+              "gnss",
+              "  %s: id=%u reserved=%u max=%u flags=0x%08X enabled=%s",
+              name,
+              gnssId,
+              resTrkCh,
+              maxTrkCh,
+              (unsigned)flags,
+              enabled ? "YES" : "NO"
+            );
+          }
+
+
+          ESP_LOGI(
+            "gnss",
+            "CFG-GNSS diagnostic complete"
+          );
   - id: switch_to_beidou
     mode: single
     then:
