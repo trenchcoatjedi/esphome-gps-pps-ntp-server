@@ -6,36 +6,41 @@ globals:
 
 script:
   # --------------------------------------------------------------------------
-  # Switch to BeiDou (Atomic Block Transmission)
+  # Switch to BeiDou (Step 1: Disable GLONASS -> Step 2: Enable BeiDou)
   # --------------------------------------------------------------------------
   - id: switch_to_beidou
     mode: restart
     then:
-      - logger.log: "Writing UBX-CFG-GNSS for BeiDou..."
+      - logger.log: "Step 1: Disabling GLONASS tracks..."
       - lambda: |-
-          // Complete 46-byte frame (including pre-calculated Fletcher checksums)
-          uint8_t frame[] = {
-            0xB5, 0x62,             // Sync
-            0x06, 0x3E,             // Class/ID (CFG-GNSS)
-            0x2C, 0x00,             // Length (44 bytes)
-            0x00, 0x20, 0x20, 0x05, // Header
-            0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01, // GPS
-            0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // SBAS
-            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01, // BeiDou (ON)
-            0x05, 0x00, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // QZSS
-            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x00, // GLONASS (OFF)
-            0x1C, 0x61              // Pre-calculated Checksum (ck_a, ck_b)
+          // UBX-CFG-GNSS: 1 block, Version 0, Disable GLONASS (0x06)
+          uint8_t disable_glonass[] = {
+            0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
+            0x00, 0x20, 0x20, 0x01, 
+            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x00,
+            0x8A, 0xEE
           };
-          
-          // Write the entire block atomically to prevent interleaving
-          id(gps_uart)->write_array(frame, sizeof(frame));
+          id(gps_uart)->write_array(disable_glonass, sizeof(disable_glonass));
+          id(gps_uart)->flush();
+
+      - delay: 300ms
+
+      - logger.log: "Step 2: Activating BeiDou tracks..."
+      - lambda: |-
+          // UBX-CFG-GNSS: 1 block, Version 0, Enable BeiDou (0x03)
+          uint8_t enable_beidou[] = {
+            0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
+            0x00, 0x20, 0x20, 0x01, 
+            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01,
+            0x89, 0xF1
+          };
+          id(gps_uart)->write_array(enable_beidou, sizeof(enable_beidou));
           id(gps_uart)->flush();
 
       - delay: 150ms
 
-      - logger.log: "Injecting Controlled GNSS Correlator Reset..."
+      - logger.log: "Step 3: Injecting Hot Reset..."
       - lambda: |-
-          // Atomic Controlled Reset Frame matching ubxtool execution
           uint8_t rst_frame[] = {
             0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10, 0x3B
           };
@@ -43,35 +48,43 @@ script:
           id(gps_uart)->flush();
           
           id(gnss_secondary_constellation).publish_state("BeiDou");
-      - logger.log: "M8030 baseband re-mapping to BeiDou completed."
+      - logger.log: "M8030 baseband switched to BeiDou."
 
   # --------------------------------------------------------------------------
-  # Switch to GLONASS (Atomic Block Transmission)
+  # Switch to GLONASS (Step 1: Disable BeiDou -> Step 2: Enable GLONASS)
   # --------------------------------------------------------------------------
   - id: switch_to_glonass
     mode: restart
     then:
-      - logger.log: "Writing UBX-CFG-GNSS for GLONASS..."
+      - logger.log: "Step 1: Disabling BeiDou tracks..."
       - lambda: |-
-          uint8_t frame[] = {
-            0xB5, 0x62,             // Sync
-            0x06, 0x3E,             // Class/ID (CFG-GNSS)
-            0x2C, 0x00,             // Length (44 bytes)
-            0x00, 0x20, 0x20, 0x05, // Header
-            0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01, // GPS
-            0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // SBAS
-            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x00, // BeiDou (OFF)
-            0x05, 0x00, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, // QZSS
-            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01, // GLONASS (ON)
-            0x1C, 0x6F              // Pre-calculated Checksum (ck_a, ck_b)
+          // UBX-CFG-GNSS: 1 block, Version 0, Disable BeiDou (0x03)
+          uint8_t disable_beidou[] = {
+            0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
+            0x00, 0x20, 0x20, 0x01, 
+            0x03, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x00,
+            0x88, 0xF0
           };
-          
-          id(gps_uart)->write_array(frame, sizeof(frame));
+          id(gps_uart)->write_array(disable_beidou, sizeof(disable_beidou));
+          id(gps_uart)->flush();
+
+      - delay: 300ms
+
+      - logger.log: "Step 2: Activating GLONASS tracks..."
+      - lambda: |-
+          // UBX-CFG-GNSS: 1 block, Version 0, Enable GLONASS (0x06)
+          uint8_t enable_glonass[] = {
+            0xB5, 0x62, 0x06, 0x3E, 0x0C, 0x00, 
+            0x00, 0x20, 0x20, 0x01, 
+            0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01,
+            0x8B, 0xEF
+          };
+          id(gps_uart)->write_array(enable_glonass, sizeof(enable_glonass));
           id(gps_uart)->flush();
 
       - delay: 150ms
 
-      - logger.log: "Injecting Controlled GNSS Correlator Reset..."
+      - logger.log: "Step 3: Injecting Hot Reset..."
       - lambda: |-
           uint8_t rst_frame[] = {
             0xB5, 0x62, 0x06, 0x04, 0x04, 0x00, 0x00, 0x00, 0x02, 0x00, 0x10, 0x3B
@@ -80,8 +93,7 @@ script:
           id(gps_uart)->flush();
           
           id(gnss_secondary_constellation).publish_state("GLONASS");
-      - logger.log: "M8030 baseband re-mapping to GLONASS completed."
-
+      - logger.log: "M8030 baseband switched to GLONASS."
 
 select:
   - platform: template
