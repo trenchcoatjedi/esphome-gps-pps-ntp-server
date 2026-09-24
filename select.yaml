@@ -1,3 +1,9 @@
+globals:
+  - id: active_constellation
+    type: std::string
+    restore_value: no
+    initial_value: '"GLONASS"'
+
 script:
   # --------------------------------------------------------------------------
   # Switch to BeiDou (Atomic Block Transmission)
@@ -75,3 +81,32 @@ script:
           
           id(gnss_secondary_constellation).publish_state("GLONASS");
       - logger.log: "M8030 baseband re-mapping to GLONASS completed."
+
+
+select:
+  - platform: template
+    name: "GNSS Secondary Constellation Selector"
+    id: gnss_secondary_constellation
+    restore_value: false
+    optimistic: true           # Keeps UI lock static on whatever string option the user clicked
+    initial_option: "GLONASS"  # Removes unstable loop lambda hooks
+    options:
+      - "GLONASS"
+      - "BeiDou"
+    set_action:
+      - if:
+          condition:
+            lambda: |-
+              return (x != id(active_constellation));
+          then:
+            - lambda: |-
+                ESP_LOGI("gnss", "Switching constellation to: %s", x.c_str());
+                id(active_constellation) = x;
+            - if:
+                condition:
+                  lambda: |-
+                    return x == "BeiDou";
+                then:
+                  - script.execute: switch_to_beidou
+                else:
+                  - script.execute: switch_to_glonass
